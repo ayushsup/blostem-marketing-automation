@@ -151,31 +151,44 @@ const SignalSchema = z.object({
   status:       z.enum(["hot", "warm", "cold"]),
 });
 
-const TouchSchema = z.object({
-  subject: z.string().optional(),
-  body: z.string().optional(),
-  opener: z.string().optional(),
-  script: z.string().optional(),
-  objections: z.array(z.object({
-    objection: z.string(),
-    response: z.string()
-  })).optional(),
+// Create STRICT schemas for each channel type (No .optional() allowed for core content)
+const EmailTouchSchema = z.object({
+  subject: z.string(),
+  body: z.string(),
   timing: z.string(),
   rationale: z.string(),
 });
 
+const LinkedinTouchSchema = z.object({
+  body: z.string(),
+  timing: z.string(),
+  rationale: z.string(),
+});
+
+const CallTouchSchema = z.object({
+  opener: z.string(),
+  script: z.string(),
+  objections: z.array(z.object({
+    objection: z.string(),
+    response: z.string()
+  })),
+  timing: z.string(),
+  rationale: z.string(),
+});
+
+// Force the sequence to use the exact channel schemas
 const SequenceSchema = z.object({
-  touch1:   TouchSchema,
-  touch2:   TouchSchema,
-  linkedin: TouchSchema,
-  call:     TouchSchema,
+  touch1:   EmailTouchSchema,
+  touch2:   EmailTouchSchema,
+  linkedin: LinkedinTouchSchema,
+  call:     CallTouchSchema,
 });
 
 const SingleTouchSchemas: Record<string, z.ZodTypeAny> = {
-  touch1:   z.object({ subject: z.string(), body: z.string(), timing: z.string(), rationale: z.string() }),
-  touch2:   z.object({ subject: z.string(), body: z.string(), timing: z.string(), rationale: z.string() }),
-  linkedin: z.object({ body: z.string(), timing: z.string(), rationale: z.string() }),
-  call:     z.object({ opener: z.string(), script: z.string(), objections: z.string(), timing: z.string(), rationale: z.string() }),
+  touch1:   EmailTouchSchema,
+  touch2:   EmailTouchSchema,
+  linkedin: LinkedinTouchSchema,
+  call:     CallTouchSchema,
 };
 
 // ── 5. PERSONA HELPER ────────────────────────────────────────────────────────
