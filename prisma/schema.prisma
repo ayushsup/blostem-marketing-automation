@@ -1,0 +1,60 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Lead {
+  id           String    @id @default(cuid())
+  company      String
+  contactName  String
+  role         String
+  industry     String
+  companySize  String
+  intentSignal String    @db.Text
+  painPoint    String    @db.Text
+  status       String
+  score        Int
+  lastActivity String
+  website      String
+  bestTime     String?
+  notes        String?   @db.Text
+  isSeeded     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  Sequence     Sequence?
+}
+
+model Sequence {
+  id       String   @id @default(cuid())
+  leadId   String   @unique
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  language String   @default("english")
+
+  touch1   Json
+  touch2   Json
+  linkedin Json
+  call     Json
+
+  touch1Subject   String?  @db.Text
+  touch1Body      String?  @db.Text
+  touch2Subject   String?  @db.Text
+  touch2Body      String?  @db.Text
+  linkedinBody    String?  @db.Text
+  callScript      String?  @db.Text
+
+  sentTouch1   Boolean @default(false)
+  sentTouch2   Boolean @default(false)
+  sentLinkedin Boolean @default(false)
+  sentCall     Boolean @default(false)
+
+  complianceWarning Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
