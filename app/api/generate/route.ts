@@ -289,7 +289,7 @@ Output ONLY the JSON for this touch.
           schema,
           system: BLOSTEM_SYSTEM_PROMPT,
           prompt,
-          temperature: 0.9,
+          temperature: 0.4,
         }));
 
         const { result, warned } = sanitize(object as object);
@@ -334,7 +334,7 @@ Generate the complete 4-touch outreach sequence.
           schema: SequenceSchema,
           system: BLOSTEM_SYSTEM_PROMPT,
           prompt: userPrompt,
-          temperature: 0.7,
+          temperature: 0.4,
         })
       );
       sequenceObj = res.object;
