@@ -160,7 +160,7 @@ const LeadSchema = z.object({
 
 const RequestSchema = z.object({
   lead:      LeadSchema,
-  action:    z.enum(["detect_signals", "generate", "regenerate_touch"]),
+  action:    z.enum(["detect_signals", "generate", "regenerate_touch", "batch_generate"]),
   language:  z.enum(["english", "hinglish"]).default("english"),
   touchType: z.enum(["touch1", "touch2", "linkedin", "call"]).optional(),
   // For saving sent status + edited content alongside sequence
