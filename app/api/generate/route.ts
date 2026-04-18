@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateObject } from "ai";
+import { generateObject, streamObject } from "ai"; 
 import { z } from "zod";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
@@ -97,6 +97,42 @@ async function generateWithCascade<T>(
   }
 
   // All models exhausted
+  const maxRetry = Math.max(...errors.map((e) => e.retryAfterSeconds));
+  throw Object.assign(new Error("ALL_QUOTA_EXCEEDED"), {
+    retryAfterSeconds: maxRetry,
+    code: "QUOTA_EXCEEDED",
+  });
+}
+
+async function streamWithCascade(
+  apiKey: string,
+  buildArgs: (model: ReturnType<ReturnType<typeof getGoogleClient>>) => Parameters<typeof streamObject>[0]
+) {
+  const client = getGoogleClient(apiKey);
+  const errors: QuotaError[] = [];
+
+  for (const modelId of MODEL_CASCADE) {
+    const model = client(modelId);
+    try {
+      const args = buildArgs(model);
+      
+      // streamObject will throw immediately if quota is hit, allowing the cascade to catch it
+      const result = await streamObject({ 
+        ...(args as any), 
+        maxRetries: 0 
+      });
+      
+      return { result, modelUsed: modelId };
+    } catch (err) {
+      if (isRetryableError(err)) {
+        errors.push({ retryAfterSeconds: parseRetryAfter(err), model: modelId });
+        console.warn(`[Blostem] Model ${modelId} unavailable for streaming. Instant fallback...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
   const maxRetry = Math.max(...errors.map((e) => e.retryAfterSeconds));
   throw Object.assign(new Error("ALL_QUOTA_EXCEEDED"), {
     retryAfterSeconds: maxRetry,
@@ -318,13 +354,14 @@ Output ONLY the JSON for this touch.
       }
     }
 
-    // ── GENERATE FULL SEQUENCE ───────────────────────────────────
-    const langGuidance =
-      language === "hinglish"
-        ? "HINGLISH MODE: Emails 1 & 2 stay in English. LinkedIn and Call must be in natural B2B Hinglish (Hindi in English script)."
-        : "ENGLISH MODE: All 4 touches in professional English.";
+    // ── GENERATE FULL SEQUENCE (NOW STREAMING) ───────────────────
+    if (action === "generate") {
+      const langGuidance =
+        language === "hinglish"
+          ? "HINGLISH MODE: Emails 1 & 2 stay in English. LinkedIn and Call must be in natural B2B Hinglish."
+          : "ENGLISH MODE: All 4 touches in professional English.";
 
-    const userPrompt = `
+      const userPrompt = `
 Company: ${lead.company}
 Contact: ${lead.contactName} (${lead.role})
 Industry: ${lead.industry} | Size: ${lead.companySize}
@@ -333,84 +370,66 @@ Pain Point: ${lead.painPoint}
 Score: ${lead.score ?? "N/A"}/100
 Persona Guidance: ${getPersonaGuidance(lead.role ?? "CEO")}
 ${langGuidance}
-Generate the complete 4-touch outreach sequence.
-    `.trim();
+Generate the complete 4-touch outreach sequence.`.trim();
 
-    let sequenceObj: z.infer<typeof SequenceSchema>;
-    let modelUsed: string;
-
-    try {
-      const res = await generateWithCascade<z.infer<typeof SequenceSchema>>(
-        apiKey,
-        (model) => ({
-          model,
-          schema: SequenceSchema,
-          system: BLOSTEM_SYSTEM_PROMPT,
-          prompt: userPrompt,
-          temperature: 0.4,
-        })
-      );
-      sequenceObj = res.object;
-      modelUsed = res.modelUsed;
-    } catch (err: any) {
-      if (err?.code === "QUOTA_EXCEEDED") {
-        return NextResponse.json(
-          { error: `Quota exceeded on all models. Retry in ${err.retryAfterSeconds}s.`, retryAfterSeconds: err.retryAfterSeconds },
-          { status: 429 }
-        );
-      }
-      throw err;
-    }
-
-    const { result: finalSequence, warned } = sanitize(sequenceObj as object);
-
-    // ── PERSIST SEQUENCE TO DB ───────────────────────────────────
-    if (lead.id) {
       try {
-        const seq = finalSequence as z.infer<typeof SequenceSchema>;
-        await prisma.sequence.upsert({
-          where:  { leadId: lead.id },
-          create: {
-            leadId:   lead.id,
-            language,
-            touch1:   seq.touch1   as any,
-            touch2:   seq.touch2   as any,
-            linkedin: seq.linkedin as any,
-            call:     seq.call     as any,
-            touch1Subject:  seq.touch1?.subject  ?? null,
-            touch1Body:     seq.touch1?.body     ?? null,
-            touch2Subject:  seq.touch2?.subject  ?? null,
-            touch2Body:     seq.touch2?.body     ?? null,
-            linkedinBody:   seq.linkedin?.body   ?? null,
-            callScript:     seq.call?.script     ?? null,
-            complianceWarning: warned,
-          },
-          update: {
-            language,
-            touch1:   seq.touch1   as any,
-            touch2:   seq.touch2   as any,
-            linkedin: seq.linkedin as any,
-            call:     seq.call     as any,
-            touch1Subject:  seq.touch1?.subject  ?? null,
-            touch1Body:     seq.touch1?.body     ?? null,
-            touch2Subject:  seq.touch2?.subject  ?? null,
-            touch2Body:     seq.touch2?.body     ?? null,
-            linkedinBody:   seq.linkedin?.body   ?? null,
-            callScript:     seq.call?.script     ?? null,
-            complianceWarning: warned,
-          },
-        });
-      } catch (dbErr) {
-        // DB failure should not block the response — sequence is still returned
-        console.error("[Blostem] DB sequence save failed:", dbErr);
+        const { result, modelUsed } = await streamWithCascade(
+          apiKey,
+          (model) => ({
+            model,
+            schema: SequenceSchema,
+            system: BLOSTEM_SYSTEM_PROMPT,
+            prompt: userPrompt,
+            temperature: 0.3,
+            // DB Save happens securely in the background when the stream finishes!
+            async onFinish({ object }) {
+              if (!lead.id || !object) return;
+              
+              const { result: finalSequence, warned } = sanitize(object);
+              const seq = finalSequence as z.infer<typeof SequenceSchema>;
+              
+              try {
+                await prisma.sequence.upsert({
+                  where:  { leadId: lead.id },
+                  create: {
+                    leadId:   lead.id,
+                    language,
+                    touch1:   seq.touch1   as any,
+                    touch2:   seq.touch2   as any,
+                    linkedin: seq.linkedin as any,
+                    call:     seq.call     as any,
+                    complianceWarning: warned,
+                  },
+                  update: {
+                    language,
+                    touch1:   seq.touch1   as any,
+                    touch2:   seq.touch2   as any,
+                    linkedin: seq.linkedin as any,
+                    call:     seq.call     as any,
+                    complianceWarning: warned,
+                  },
+                });
+                console.log(`[Blostem] Stream finished. DB saved for Lead ${lead.id}`);
+              } catch (dbErr) {
+                console.error("[Blostem] DB save failed:", dbErr);
+              }
+            }
+          })
+        );
+        
+        // This pipes the live typing directly to your Next.js frontend
+        return result.toTextStreamResponse();
+        
+      } catch (err: any) {
+        if (err?.code === "QUOTA_EXCEEDED") {
+          return NextResponse.json(
+            { error: `Quota exceeded. Retry in ${err.retryAfterSeconds}s.`, retryAfterSeconds: err.retryAfterSeconds },
+            { status: 429 }
+          );
+        }
+        throw err;
       }
     }
-
-    return NextResponse.json({
-      sequence: finalSequence,
-      complianceWarning: warned,
-      modelUsed,
-    });
 
   } catch (err) {
     console.error("[Blostem] Critical API error:", err);
