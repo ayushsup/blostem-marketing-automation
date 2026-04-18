@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPrisma } from "@/lib/prisma";
-
+export const dynamic = "force-dynamic";
 // ── GET /api/leads — fetch all leads with their latest sequence ───────────────
 export async function GET() {
   const prisma = getPrisma();

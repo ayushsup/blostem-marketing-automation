@@ -231,7 +231,7 @@ export default function Dashboard() {
       setIsLoadingLeads(true);
       try {
         await fetch("/api/seed");
-        const res = await fetch("/api/leads");
+        const res = await fetch(`/api/leads?_t=${Date.now()}`, { cache: "no-store" });        
         if (!res.ok) throw new Error("Failed to fetch leads");
         const data = await res.json();
         const dbLeads: LeadWithDb[] = data.leads;
@@ -311,7 +311,7 @@ export default function Dashboard() {
   const currentNote = notesByLead[selectedLead?.id] ?? "";
   
   // Safe display sequence for the UI (prioritizes final sequence, falls back to live stream)
-  const displaySeq = sequence || (streamedSequence as Sequence | undefined);
+  const displaySeq = isStreaming ? (streamedSequence as Sequence | undefined) : sequence;
 
   /* ── Actions ────────────────────────────────────────────────── */
   /* ── Auto-Pilot Batch Generation ────────────────────────────── */
