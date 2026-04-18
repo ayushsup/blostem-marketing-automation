@@ -11,6 +11,9 @@ import {
   PERSONA_SPECIFIC_GUIDANCE,
 } from "@/lib/prompts";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 // ── 1. RATE LIMITING ─────────────────────────────────────────────────────────
 
 const ratelimit = process.env.UPSTASH_REDIS_REST_URL
