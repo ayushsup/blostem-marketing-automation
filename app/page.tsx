@@ -330,10 +330,13 @@ export default function Dashboard() {
 
     for (const lead of hotLeads) {
       try {
-        const res = await fetch("/api/generate", {
+        // 🛑 CRITICAL FIX: The dynamic query parameters and "no-store" completely 
+        // destroy Next.js's ability to cache the fetch requests in the loop.
+        const res = await fetch(`/api/generate?_t=${Date.now()}&_id=${lead.id}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ lead, action: "batch_generate", language: "english" }),
+          cache: "no-store" 
         });
         
         const data = await res.json();
@@ -368,6 +371,12 @@ export default function Dashboard() {
                 : l
             )
           );
+
+          // 🛑 SYNC FIX: Keep the active UI updated if the user is watching the lead being generated
+          if (selectedLead.id === lead.id) {
+            setSequence(seq);
+            setEditedContent(ec);
+          }
         }
       } catch (err) {
         console.error(`Auto-Pilot failed for ${lead.company}`, err);
