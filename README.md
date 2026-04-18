@@ -1,8 +1,3 @@
-Here is a complete, highly detailed, and professional `README.md` file for the Blostem AI Engine. It is formatted specifically to impress hackathon judges, recruiters, or open-source contributors by highlighting the enterprise-grade architecture we just built.
-
-Copy this entire block and paste it into a `README.md` file in the root of your project:
-
-````markdown
 # ⚡ Blostem AI Engine
 
 **Enterprise AI Signal Intelligence & Automated Outreach Platform**
@@ -49,18 +44,15 @@ To prevent data loss from Vercel Serverless CPU freezes during long-running LLM 
 ```bash
 git clone [https://github.com/YOUR_USERNAME/blostem-ai-engine.git](https://github.com/YOUR_USERNAME/blostem-ai-engine.git)
 cd blostem-ai-engine
-````
+```
 
-### 2\. Install Dependencies
-
+### 2. Install Dependencies
 ```bash
 npm install
 ```
 
-### 3\. Set up Environment Variables
-
+### 3. Set up Environment Variables
 Create a `.env.local` file in the root directory and add the following keys:
-
 ```env
 # Your AI Provider Key (Google Gemini / OpenAI)
 AI_API_KEY=your_api_key_here
@@ -72,41 +64,28 @@ DATABASE_URL=your_neon_db_url_here
 CRM_WEBHOOK_URL=[https://webhook.site/your-unique-id](https://webhook.site/your-unique-id)
 ```
 
-### 4\. Initialize the Database
-
+### 4. Initialize the Database
 Push the Prisma schema to your Neon database:
-
 ```bash
 npx prisma db push
 ```
 
-### 5\. Run the Development Server
-
+### 5. Run the Development Server
 ```bash
 npm run dev
 ```
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the engine in action.
 
-Open [http://localhost:3000](https://www.google.com/search?q=http://localhost:3000) with your browser to see the engine in action.
-
------
+---
 
 ## 🧪 Evaluation Guide (For Hackathon Judges)
 
 If you are evaluating this project, here is the fastest way to experience the full power of the engine:
 
-1.  **Test the Signal Detection:** Click **+ ADD LEAD**. Enter "NeoVault Financial" and paste a raw news snippet about them raising a Series B to fix their "legacy API tech debt." Click **Detect Signals with AI** and watch the engine isolate the pain point and score the lead.
-2.  **Test the Streaming:** Select a lead in the sidebar and click **Generate Outreach Sequence**. Watch the UI stream the results live.
-3.  **Test Auto-Pilot:** Ensure you have multiple "HOT" leads in your sidebar without sequences. Click **🚀 RUN AUTO-PILOT** and watch the database populate autonomously.
-4.  **Test the Webhook:** Have a [webhook.site](https://webhook.site/) tab open. In Blostem, select a completed lead and click **Push to CRM**. Watch the highly-structured JSON payload instantly arrive at the webhook URL.
+1. **Test the Signal Detection:** Click **+ ADD LEAD**. Enter "NeoVault Financial" and paste a raw news snippet about them raising a Series B to fix their "legacy API tech debt." Click **Detect Signals with AI** and watch the engine isolate the pain point and score the lead.
+2. **Test the Streaming:** Select a lead in the sidebar and click **Generate Outreach Sequence**. Watch the UI stream the results live.
+3. **Test Auto-Pilot:** Ensure you have multiple "HOT" leads in your sidebar without sequences. Click **🚀 RUN AUTO-PILOT** and watch the database populate autonomously.
+4. **Test the Webhook:** Have a [webhook.site](https://webhook.site/) tab open. In Blostem, select a completed lead and click **Push to CRM**. Watch the highly-structured JSON payload instantly arrive at the webhook URL. 
 
------
-
+---
 *Built with precision for the future of automated sales infrastructure.*
-
-```
-
-**Next Steps:**
-1. Replace `YOUR_VERCEL_URL_HERE` at the top with your actual Vercel link.
-2. Replace `YOUR_USERNAME` in the clone command with your GitHub username.
-3. Commit and push this to your repository!
-```
