@@ -356,7 +356,59 @@ Output ONLY the JSON for this touch.
         throw err;
       }
     }
+    // ── BATCH AUTOMATION (NON-STREAMING) ─────────────────────────
+    if (action === "batch_generate") {
+      const userPrompt = `
+Company: ${lead.company}
+Contact: ${lead.contactName} (${lead.role})
+Industry: ${lead.industry} | Size: ${lead.companySize}
+Signal: ${lead.intentSignal}
+Pain Point: ${lead.painPoint}
+Score: ${lead.score ?? "N/A"}/100
+Persona Guidance: ${getPersonaGuidance(lead.role ?? "CEO")}
+ENGLISH MODE: All 4 touches in professional English.`.trim();
 
+      try {
+        const { object, modelUsed } = await generateWithCascade<z.infer<typeof SequenceSchema>>(
+          apiKey,
+          (model) => ({
+            model,
+            schema: SequenceSchema,
+            system: BLOSTEM_SYSTEM_PROMPT,
+            prompt: userPrompt,
+            temperature: 0.3,
+          })
+        );
+
+        const { result: finalSequence, warned } = sanitize(object);
+        const seq = finalSequence as z.infer<typeof SequenceSchema>;
+
+        if (lead.id) {
+          try {
+            await prisma.sequence.upsert({
+              where:  { leadId: lead.id },
+              create: {
+                leadId:   lead.id, language: "english",
+                touch1: seq.touch1 as any, touch2: seq.touch2 as any, linkedin: seq.linkedin as any, call: seq.call as any,
+                complianceWarning: warned,
+              },
+              update: {
+                language: "english",
+                touch1: seq.touch1 as any, touch2: seq.touch2 as any, linkedin: seq.linkedin as any, call: seq.call as any,
+                complianceWarning: warned,
+              },
+            });
+          } catch (dbErr) { console.error("[Blostem] DB save failed during batch:", dbErr); }
+        }
+
+        return NextResponse.json({ sequence: finalSequence, complianceWarning: warned, modelUsed });
+      } catch (err: any) {
+        if (err?.code === "QUOTA_EXCEEDED") {
+          return NextResponse.json({ error: "Quota exceeded.", retryAfterSeconds: err.retryAfterSeconds }, { status: 429 });
+        }
+        throw err;
+      }
+    }
     // ── GENERATE FULL SEQUENCE (NOW STREAMING) ───────────────────
     if (action === "generate") {
       const langGuidance =

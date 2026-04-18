@@ -314,6 +314,68 @@ export default function Dashboard() {
   const displaySeq = sequence || (streamedSequence as Sequence | undefined);
 
   /* ── Actions ────────────────────────────────────────────────── */
+  /* ── Auto-Pilot Batch Generation ────────────────────────────── */
+  const [isAutoPiloting, setIsAutoPiloting] = useState(false);
+
+  async function runAutoPilot() {
+    const hotLeads = leads.filter((l) => l.status === "hot" && !l.savedSequence);
+    
+    if (hotLeads.length === 0) {
+      showToast("No fresh HOT leads available for Auto-Pilot.", "sync");
+      return;
+    }
+
+    setIsAutoPiloting(true);
+    showToast(`🚀 Auto-Pilot engaged: Processing ${hotLeads.length} leads sequentially...`, "sync", 4000);
+
+    for (const lead of hotLeads) {
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lead, action: "batch_generate", language: "english" }),
+        });
+        
+        const data = await res.json();
+        
+        if (res.status === 429) {
+          showToast(`Quota hit during Auto-Pilot. Pausing operations.`, "quota");
+          startCountdown(data.retryAfterSeconds ?? 30);
+          break;
+        }
+
+        if (data.sequence) {
+          const seq = data.sequence as Sequence;
+          const ec: EditedContent = {
+            touch1Subject: seq.touch1?.subject ?? "", touch1Body: seq.touch1?.body ?? "",
+            touch2Subject: seq.touch2?.subject ?? "", touch2Body: seq.touch2?.body ?? "",
+            linkedinBody: seq.linkedin?.body ?? "", callScript: seq.call?.script ?? "",
+          };
+
+          // Update local state silently so UI badges update in real-time
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === lead.id
+                ? {
+                    ...l,
+                    savedSequence: {
+                      id: "auto", language: "english",
+                      touch1: seq.touch1, touch2: seq.touch2, linkedin: seq.linkedin, call: seq.call,
+                      editedContent: ec, sentStatus: { touch1: false, touch2: false, linkedin: false, call: false },
+                      complianceWarning: data.complianceWarning ?? false,
+                    },
+                  }
+                : l
+            )
+          );
+        }
+      } catch (err) {
+        console.error(`Auto-Pilot failed for ${lead.company}`, err);
+      }
+    }
+    setIsAutoPiloting(false);
+    showToast("✓ Auto-Pilot complete. Pipeline updated.");
+  }
   function startCountdown(seconds: number) {
     if (countdownRef.current) clearInterval(countdownRef.current);
     setRetryCountdown(seconds);
@@ -691,7 +753,20 @@ export default function Dashboard() {
             ))
           )}
         </div>
-        <button type="button" onClick={() => setShowAddModal(true)} className={styles.addLeadBtn}>+ ADD LEAD</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button 
+            type="button" 
+            onClick={runAutoPilot} 
+            disabled={isAutoPiloting || retryCountdown !== null} 
+            className={styles.addLeadBtn} 
+            style={{ background: 'var(--accent)', color: '#000', fontWeight: 700 }}
+          >
+            {isAutoPiloting ? "⚙ PROCESSING PIPELINE..." : "🚀 RUN AUTO-PILOT"}
+          </button>
+          <button type="button" onClick={() => setShowAddModal(true)} className={styles.addLeadBtn}>
+            + ADD LEAD
+          </button>
+        </div>
       </div>
 
       <div className={styles.main}>
