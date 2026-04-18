@@ -564,21 +564,42 @@ export default function Dashboard() {
     setTimeout(() => setDownloadSuccess(false), 2500);
   }
 
+  /* ── CRM Push ────────────────────────────────────────────────── */
   async function pushToCRM() {
-    if (!selectedLead) return;
+    if (!selectedLead || !editedContent) return;
+    
     setCrmLeadName(selectedLead.company);
     setCrmStep("idle");
     setShowCrmModal(true);
-    if (editedContent) saveEditedContent(editedContent);
 
-    let delay = 0;
-    for (const { step, duration } of CRM_STEPS) {
-      await new Promise((res) => setTimeout(res, delay));
-      setCrmStep(step);
-      delay = duration;
+    // Start UI Animation
+    setCrmStep("validating");
+    await new Promise((res) => setTimeout(res, 900));
+    
+    setCrmStep("syncing");
+
+    // 🚀 REAL API CALL TO WEBHOOK
+    try {
+      const res = await fetch("/api/crm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead: selectedLead,
+          sequence: editedContent
+        })
+      });
+
+      if (!res.ok) throw new Error("CRM Sync Failed");
+
+      setCrmStep("updating");
+      await new Promise((res) => setTimeout(res, 800));
+      setCrmStep("done");
+      
+    } catch (err) {
+      showToast("Failed to sync with CRM Check server logs.", "error");
+      setShowCrmModal(false);
     }
   }
-
   function closeCrmModal() {
     setShowCrmModal(false);
     setCrmStep("idle");
