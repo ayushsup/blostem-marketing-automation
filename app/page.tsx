@@ -7,7 +7,6 @@ import { leads as SEED_LEADS, Lead, LeadStatus } from "@/lib/data";
 import styles from "./page.module.css";
 
 /* ─── Zod Schema for Streaming ──────────────────────────────── */
-// The frontend needs a permissive schema to parse the partial JSON stream
 const StreamTouchSchema = z.object({
   subject: z.string().optional(),
   body: z.string().optional(),
@@ -26,7 +25,6 @@ const SequenceSchema = z.object({
 });
 
 /* ─── Types ─────────────────────────────────────────────────── */
-
 type TouchType = "touch1" | "touch2" | "linkedin" | "call";
 
 type SequenceTouch = {
@@ -83,11 +81,9 @@ type DetectedSignals = {
 };
 
 type CrmStep = "idle" | "validating" | "syncing" | "updating" | "done";
-
 type Toast = { message: string; type: "success" | "error" | "sync" | "quota" } | null;
 
 /* ─── Constants ─────────────────────────────────────────────── */
-
 const TABS: { key: TouchType; label: string; icon: string; day: string }[] = [
   { key: "touch1",   label: "EMAIL 1",     icon: "✉",  day: "D1"  },
   { key: "touch2",   label: "EMAIL 2",     icon: "✉",  day: "D4"  },
@@ -107,7 +103,6 @@ const CRM_STEPS: { step: CrmStep; label: string; duration: number }[] = [
 ];
 
 /* ─── Helpers ───────────────────────────────────────────────── */
-
 function cls(...args: (string | boolean | undefined | null)[]) {
   return args.filter(Boolean).join(" ");
 }
@@ -135,7 +130,6 @@ function wordCount(text: string) {
 }
 
 /* ─── Component ─────────────────────────────────────────────── */
-
 export default function Dashboard() {
   const [leads, setLeads] = useState<LeadWithDb[]>(SEED_LEADS);
   const [selectedLead, setSelectedLead] = useState<LeadWithDb>(SEED_LEADS[0]);
@@ -179,7 +173,8 @@ export default function Dashboard() {
   const { object: streamedSequence, submit: generateStream, isLoading: isStreaming } = useObject({
     api: '/api/generate',
     schema: SequenceSchema,
-    onFinish({ object, error }) {
+    // Explicit TS types fix the implicit any error
+    onFinish({ object, error }: { object?: any; error?: any }) {
       if (error) {
         showToast("Generation failed or quota exceeded.", "error");
         return;
@@ -188,39 +183,44 @@ export default function Dashboard() {
         const seq = object as Sequence;
         setSequence(seq);
         
-        // Populate the editable textareas now that streaming is complete
         const ec: EditedContent = {
-          touch1Subject: seq.touch1?.subject ?? "",
-          touch1Body:    seq.touch1?.body    ?? "",
-          touch2Subject: seq.touch2?.subject ?? "",
-          touch2Body:    seq.touch2?.body    ?? "",
-          linkedinBody:  seq.linkedin?.body  ?? "",
-          callScript:    seq.call?.script    ?? "",
+          touch1Subject: seq.touch1?.subject ?? "", touch1Body: seq.touch1?.body ?? "",
+          touch2Subject: seq.touch2?.subject ?? "", touch2Body: seq.touch2?.body ?? "",
+          linkedinBody: seq.linkedin?.body ?? "", callScript: seq.call?.script ?? "",
         };
         setEditedContent(ec);
         setActiveTab("touch1");
 
-        // Update local lead state so we remember it
         setLeads((prev) =>
           prev.map((l) =>
             l.id === selectedLead.id
               ? {
                   ...l,
                   savedSequence: {
-                    id: "pending",
-                    language: languageMode,
-                    touch1:   seq.touch1,
-                    touch2:   seq.touch2,
-                    linkedin: seq.linkedin,
-                    call:     seq.call,
-                    editedContent: ec,
-                    sentStatus: sentStatus[selectedLead.id] ?? { touch1: false, touch2: false, linkedin: false, call: false },
+                    id: "pending", language: languageMode,
+                    touch1: seq.touch1, touch2: seq.touch2, linkedin: seq.linkedin, call: seq.call,
+                    editedContent: ec, sentStatus: sentStatus[selectedLead.id] ?? { touch1: false, touch2: false, linkedin: false, call: false },
                     complianceWarning: false,
                   },
                 }
               : l
           )
         );
+
+        // 🚀 THE ABSOLUTE FIX: Frontend physically commands the database save via dedicated route
+        fetch("/api/sequence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            leadId: selectedLead.id,
+            language: languageMode,
+            sequence: seq,
+            complianceWarning: false
+          })
+        }).then(res => {
+          if (!res.ok) console.error("Frontend DB save failed");
+          else console.log(`[Blostem] Sequence permanently saved for ${selectedLead.company}`);
+        }).catch(console.error);
       }
     }
   });
@@ -231,7 +231,8 @@ export default function Dashboard() {
       setIsLoadingLeads(true);
       try {
         await fetch("/api/seed");
-        const res = await fetch(`/api/leads?_t=${Date.now()}`, { cache: "no-store" });        
+        // 🛑 CACHE FIX: Force Next.js to pull fresh data on every reload
+        const res = await fetch(`/api/leads?_t=${Date.now()}`, { cache: "no-store" });
         if (!res.ok) throw new Error("Failed to fetch leads");
         const data = await res.json();
         const dbLeads: LeadWithDb[] = data.leads;
@@ -310,81 +311,10 @@ export default function Dashboard() {
   const avgScore  = Math.round(leads.reduce((a, l) => a + l.score, 0) / Math.max(leads.length, 1));
   const currentNote = notesByLead[selectedLead?.id] ?? "";
   
-  // Safe display sequence for the UI (prioritizes final sequence, falls back to live stream)
+  // 🛑 GHOST STREAM FIX: Only show stream UI when actively typing
   const displaySeq = isStreaming ? (streamedSequence as Sequence | undefined) : sequence;
 
   /* ── Actions ────────────────────────────────────────────────── */
-  /* ── Auto-Pilot Batch Generation ────────────────────────────── */
-  const [isAutoPiloting, setIsAutoPiloting] = useState(false);
-
-  async function runAutoPilot() {
-    const hotLeads = leads.filter((l) => l.status === "hot" && !l.savedSequence);
-    
-    if (hotLeads.length === 0) {
-      showToast("No fresh HOT leads available for Auto-Pilot.", "sync");
-      return;
-    }
-
-    setIsAutoPiloting(true);
-    showToast(`🚀 Auto-Pilot engaged: Processing ${hotLeads.length} leads sequentially...`, "sync", 4000);
-
-    for (const lead of hotLeads) {
-      try {
-        // 🛑 CRITICAL FIX: The dynamic query parameters and "no-store" completely 
-        // destroy Next.js's ability to cache the fetch requests in the loop.
-        const res = await fetch(`/api/generate?_t=${Date.now()}&_id=${lead.id}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lead, action: "batch_generate", language: "english" }),
-          cache: "no-store" 
-        });
-        
-        const data = await res.json();
-        
-        if (res.status === 429) {
-          showToast(`Quota hit during Auto-Pilot. Pausing operations.`, "quota");
-          startCountdown(data.retryAfterSeconds ?? 30);
-          break;
-        }
-
-        if (data.sequence) {
-          const seq = data.sequence as Sequence;
-          const ec: EditedContent = {
-            touch1Subject: seq.touch1?.subject ?? "", touch1Body: seq.touch1?.body ?? "",
-            touch2Subject: seq.touch2?.subject ?? "", touch2Body: seq.touch2?.body ?? "",
-            linkedinBody: seq.linkedin?.body ?? "", callScript: seq.call?.script ?? "",
-          };
-
-          // Update local state silently so UI badges update in real-time
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === lead.id
-                ? {
-                    ...l,
-                    savedSequence: {
-                      id: "auto", language: "english",
-                      touch1: seq.touch1, touch2: seq.touch2, linkedin: seq.linkedin, call: seq.call,
-                      editedContent: ec, sentStatus: { touch1: false, touch2: false, linkedin: false, call: false },
-                      complianceWarning: data.complianceWarning ?? false,
-                    },
-                  }
-                : l
-            )
-          );
-
-          // 🛑 SYNC FIX: Keep the active UI updated if the user is watching the lead being generated
-          if (selectedLead.id === lead.id) {
-            setSequence(seq);
-            setEditedContent(ec);
-          }
-        }
-      } catch (err) {
-        console.error(`Auto-Pilot failed for ${lead.company}`, err);
-      }
-    }
-    setIsAutoPiloting(false);
-    showToast("✓ Auto-Pilot complete. Pipeline updated.");
-  }
   function startCountdown(seconds: number) {
     if (countdownRef.current) clearInterval(countdownRef.current);
     setRetryCountdown(seconds);
@@ -425,6 +355,72 @@ export default function Dashboard() {
     if (selectedLead.id === id && remaining.length > 0) selectLead(remaining[0]);
     showToast("Lead removed from pipeline.");
     try { await fetch(`/api/leads?id=${id}`, { method: "DELETE" }); } catch {}
+  }
+
+  /* ── Auto-Pilot Batch Generation ────────────────────────────── */
+  const [isAutoPiloting, setIsAutoPiloting] = useState(false);
+
+  async function runAutoPilot() {
+    const hotLeads = leads.filter((l) => l.status === "hot" && !l.savedSequence);
+    
+    if (hotLeads.length === 0) {
+      showToast("No fresh HOT leads available for Auto-Pilot.", "sync");
+      return;
+    }
+
+    setIsAutoPiloting(true);
+    showToast(`🚀 Auto-Pilot engaged: Processing ${hotLeads.length} leads sequentially...`, "sync", 4000);
+
+    for (const lead of hotLeads) {
+      try {
+        const res = await fetch(`/api/generate?_t=${Date.now()}&_id=${lead.id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lead, action: "batch_generate", language: "english" }),
+          cache: "no-store" 
+        });
+        
+        const data = await res.json();
+        
+        if (res.status === 429) {
+          showToast(`Quota hit during Auto-Pilot. Pausing operations.`, "quota");
+          startCountdown(data.retryAfterSeconds ?? 30);
+          break;
+        }
+
+        if (data.sequence) {
+          const seq = data.sequence as Sequence;
+          const ec: EditedContent = {
+            touch1Subject: seq.touch1?.subject ?? "", touch1Body: seq.touch1?.body ?? "",
+            touch2Subject: seq.touch2?.subject ?? "", touch2Body: seq.touch2?.body ?? "",
+            linkedinBody: seq.linkedin?.body ?? "", callScript: seq.call?.script ?? "",
+          };
+
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === lead.id ? {
+                ...l,
+                savedSequence: {
+                  id: "auto", language: "english",
+                  touch1: seq.touch1, touch2: seq.touch2, linkedin: seq.linkedin, call: seq.call,
+                  editedContent: ec, sentStatus: { touch1: false, touch2: false, linkedin: false, call: false },
+                  complianceWarning: data.complianceWarning ?? false,
+                },
+              } : l
+            )
+          );
+
+          if (selectedLead.id === lead.id) {
+            setSequence(seq);
+            setEditedContent(ec);
+          }
+        }
+      } catch (err) {
+        console.error(`Auto-Pilot failed for ${lead.company}`, err);
+      }
+    }
+    setIsAutoPiloting(false);
+    showToast("✓ Auto-Pilot complete. Pipeline updated.");
   }
 
   /* ── Handle Streaming Generation ────────────────────────────── */
@@ -564,7 +560,7 @@ export default function Dashboard() {
     setTimeout(() => setDownloadSuccess(false), 2500);
   }
 
-  /* ── CRM Push ────────────────────────────────────────────────── */
+  /* ── CRM Webhook Push ────────────────────────────────────────── */
   async function pushToCRM() {
     if (!selectedLead || !editedContent) return;
     
@@ -572,21 +568,16 @@ export default function Dashboard() {
     setCrmStep("idle");
     setShowCrmModal(true);
 
-    // Start UI Animation
     setCrmStep("validating");
     await new Promise((res) => setTimeout(res, 900));
     
     setCrmStep("syncing");
 
-    // 🚀 REAL API CALL TO WEBHOOK
     try {
       const res = await fetch("/api/crm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lead: selectedLead,
-          sequence: editedContent
-        })
+        body: JSON.stringify({ lead: selectedLead, sequence: editedContent })
       });
 
       if (!res.ok) throw new Error("CRM Sync Failed");
@@ -594,12 +585,12 @@ export default function Dashboard() {
       setCrmStep("updating");
       await new Promise((res) => setTimeout(res, 800));
       setCrmStep("done");
-      
     } catch (err) {
-      showToast("Failed to sync with CRM Check server logs.", "error");
+      showToast("Failed to sync with CRM. Check server logs.", "error");
       setShowCrmModal(false);
     }
   }
+
   function closeCrmModal() {
     setShowCrmModal(false);
     setCrmStep("idle");
@@ -783,7 +774,8 @@ export default function Dashboard() {
             ))
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px' }}>
           <button 
             type="button" 
             onClick={runAutoPilot} 
