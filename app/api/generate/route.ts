@@ -1,3 +1,4 @@
+import { waitUntil } from "@vercel/functions";
 import { NextResponse } from "next/server";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateObject, streamObject } from "ai"; 
@@ -437,37 +438,43 @@ Generate the complete 4-touch outreach sequence.`.trim();
             prompt: userPrompt,
             temperature: 0.3,
             // DB Save happens securely in the background when the stream finishes!
-            async onFinish({ object }) {
+            onFinish({ object }) {
               if (!lead.id || !object) return;
               
               const { result: finalSequence, warned } = sanitize(object);
               const seq = finalSequence as z.infer<typeof SequenceSchema>;
               
-              try {
-                await prisma.sequence.upsert({
-                  where:  { leadId: lead.id },
-                  create: {
-                    leadId:   lead.id,
-                    language,
-                    touch1:   seq.touch1   as any,
-                    touch2:   seq.touch2   as any,
-                    linkedin: seq.linkedin as any,
-                    call:     seq.call     as any,
-                    complianceWarning: warned,
-                  },
-                  update: {
-                    language,
-                    touch1:   seq.touch1   as any,
-                    touch2:   seq.touch2   as any,
-                    linkedin: seq.linkedin as any,
-                    call:     seq.call     as any,
-                    complianceWarning: warned,
-                  },
-                });
-                console.log(`[Blostem] Stream finished. DB saved for Lead ${lead.id}`);
-              } catch (dbErr) {
-                console.error("[Blostem] DB save failed:", dbErr);
-              }
+              // 🛑 VERCEL FREEZE FIX: Tell Vercel to keep the CPU alive until this Promise resolves
+              waitUntil(
+                (async () => {
+                  try {
+                    await prisma.sequence.upsert({
+                      // TS FIX: Cast lead.id to string since we already verified it exists above
+                      where:  { leadId: lead.id as string },
+                      create: {
+                        leadId:   lead.id as string,
+                        language,
+                        touch1:   seq.touch1   as any,
+                        touch2:   seq.touch2   as any,
+                        linkedin: seq.linkedin as any,
+                        call:     seq.call     as any,
+                        complianceWarning: warned,
+                      },
+                      update: {
+                        language,
+                        touch1:   seq.touch1   as any,
+                        touch2:   seq.touch2   as any,
+                        linkedin: seq.linkedin as any,
+                        call:     seq.call     as any,
+                        complianceWarning: warned,
+                      },
+                    });
+                    console.log(`[Blostem] Stream finished. DB saved securely for Lead ${lead.id}`);
+                  } catch (dbErr) {
+                    console.error("[Blostem] DB save failed:", dbErr);
+                  }
+                })()
+              );
             }
           })
         );
