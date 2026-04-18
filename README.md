@@ -2,7 +2,7 @@
 
 **Enterprise AI Signal Intelligence & Automated Outreach Platform**
 
-[![Live Application](https://img.shields.io/badge/Live_Demo-Test_Blostem_Here-00D4AA?style=for-the-badge)]((https://vercel.com/ayushsups-projects/blostem-marketing-automation/Ah9JDybru7f8BJLDNubP2v7DRVpC))
+[![Live Application](https://img.shields.io/badge/Live_Demo-Test_Blostem_Here-00D4AA?style=for-the-badge)]([(https://vercel.com/ayushsups-projects/blostem-marketing-automation/Ah9JDybru7f8BJLDNubP2v7DRVpC)])
 
 Blostem is an enterprise-grade marketing automation platform designed for high-velocity sales teams. It ingests unstructured web intelligence, uses AI to detect buying signals and pain points, and automatically generates highly personalized, compliance-safe, 4-touch outreach sequences.
 
