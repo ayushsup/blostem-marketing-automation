@@ -92,18 +92,18 @@ If you are evaluating this project, here is the fastest way to experience the fu
 
 **1. The Command Center**
 *A unified view of the pipeline, lead scores, and active sequences.*
-![Main Dashboard](blostem-ai-engine\public\dash.png)
+![Main Dashboard](public/dash.png)
 
 **2. AI Signal Detection**
 *Ingesting raw web intel to extract intent, pain points, and optimal send times.*
-![Signal Detection Modal](blostem-ai-engine\public\detect.png)
+![Signal Detection Modal](public/detect.png)
 
 **3. Personalized Sequence Generation**
 *Adapting tone and value propositions based on the lead's exact role and pain points.*
-![Sequence Generator](blostem-ai-engine\public\cont.png)
+![Sequence Generator](public/cont.png)
 
 **4. Enterprise CRM Sync (The Last Mile)**
 *Pushing the finalized sequence out of Blostem and into a live CRM webhook.*
-![CRM Sync Modal](blostem-ai-engine\public\crm push.png)
-![Webhook Payload](blostem-ai-engine\public\webhook.png)
+![CRM Sync Modal](public/crm%20push.png)
+![Webhook Payload](public/webhook.png)
 
