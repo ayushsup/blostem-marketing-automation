@@ -27,7 +27,7 @@ const ratelimit = process.env.UPSTASH_REDIS_REST_URL
 
 // Use the high-availability 2026 model lineup
 const MODEL_CASCADE = [
-  "gemini-2.5-flash"    // Secondary: Stable LTS model (Standard availability)
+  "gemini-2.5-flash-lite"    // Secondary: Stable LTS model (Standard availability)
 ] as const;
 
 function getGoogleClient(apiKey: string) {
